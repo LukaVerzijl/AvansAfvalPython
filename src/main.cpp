@@ -13,6 +13,9 @@
 #ifndef SSCMA_RX_PIN
 #define SSCMA_RX_PIN D7
 #endif
+
+#ifndef SSCMA_TX_PIN
+#define SSCMA_TX_PIN D6
 #endif
 
 GpsUtil gps;
