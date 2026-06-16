@@ -48,6 +48,32 @@ bool SscmaUtil::begin(HardwareSerial &serial, Stream &output, uint32_t baud)
     return true;
 }
 
+bool SscmaUtil::begin(HardwareSerial &serial, int8_t rxPin, int8_t txPin, Stream &output, uint32_t baud)
+{
+    output.print("SSCMA: starten via UART RX=");
+    output.print(rxPin);
+    output.print(", TX=");
+    output.println(txPin);
+
+    serial.begin(baud, SERIAL_8N1, rxPin, txPin);
+    serial.setTimeout(1000);
+
+    _ready = _ai.begin(&serial, _resetPin, baud);
+
+    if (!_ready)
+    {
+        output.println("SSCMA: niet gevonden via UART.");
+        return false;
+    }
+
+    output.print("SSCMA: verbonden met ");
+    output.print(_ai.name());
+    output.print(" (");
+    output.print(_ai.ID());
+    output.println(")");
+    return true;
+}
+
 bool SscmaUtil::invoke(bool filter, bool showImage)
 {
     if (!_ready)

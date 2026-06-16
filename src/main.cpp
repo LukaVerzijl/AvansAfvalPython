@@ -1,6 +1,7 @@
 #include <Arduino.h>
 
 #include "GpsUtil.h"
+#include "SscmaUtil.h"
 #include "WifiModule.h"
 
 #ifndef WIFI_SSID
@@ -9,6 +10,9 @@
 
 #ifndef WIFI_PASSWORD
 #define WIFI_PASSWORD ""
+#ifndef SSCMA_RX_PIN
+#define SSCMA_RX_PIN D7
+#endif
 #endif
 
 GpsUtil gps;
@@ -28,7 +32,7 @@ void setup()
 
     wifi.begin(Serial, 15000);
     gps.begin();
-    ai.begin(atSerial, Serial);
+    ai.begin(atSerial, SSCMA_RX_PIN, SSCMA_TX_PIN, Serial);
 }
 
 void loop()

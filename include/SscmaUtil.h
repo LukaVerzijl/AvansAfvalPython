@@ -12,6 +12,8 @@ public:
 
     bool begin(Stream &output = Serial);
     bool begin(HardwareSerial &serial, Stream &output = Serial, uint32_t baud = SSCMA_UART_BAUD);
+    bool begin(HardwareSerial &serial, int8_t rxPin, int8_t txPin, Stream &output = Serial,
+               uint32_t baud = SSCMA_UART_BAUD);
     bool invoke(bool filter = false, bool showImage = false);
     bool invokeEvery(uint32_t intervalMillis, Stream &output = Serial, bool filter = false, bool showImage = false);
 
