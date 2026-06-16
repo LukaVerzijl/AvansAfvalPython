@@ -12,10 +12,12 @@ public:
     bool begin(Stream &output = Serial, uint32_t timeoutMillis = 15000);
     bool isConnected() const;
     void printStatus(Stream &output = Serial) const;
+    void printStatusEvery(Stream &output, uint32_t intervalMillis);
 
 private:
     const char *_ssid;
     const char *_password;
+    uint32_t _lastStatusMillis;
 };
 
 #endif

@@ -19,9 +19,13 @@ uint32_t lastMapsLinkMillis = 0;
 void setup()
 {
     Serial.begin(115200);
+    delay(4000);
 
+    Serial.println();
+    Serial.println("Start Seeed XIAO ESP32S3");
+
+    wifi.begin(Serial, 15000);
     gps.begin();
-    wifi.begin();
 }
 
 void loop()
