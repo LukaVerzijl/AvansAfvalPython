@@ -12,7 +12,9 @@
 #endif
 
 GpsUtil gps;
+SscmaUtil ai;
 WifiModule wifi(WIFI_SSID, WIFI_PASSWORD);
+HardwareSerial atSerial(0);
 
 uint32_t lastMapsLinkMillis = 0;
 
@@ -26,11 +28,15 @@ void setup()
 
     wifi.begin(Serial, 15000);
     gps.begin();
+    ai.begin(atSerial, Serial);
 }
 
 void loop()
 {
     if (gps.update(&Serial, &Serial))
+    ai.invokeEvery(5000, Serial, true);
+
+    if (gps.update())
     {
         if (lastMapsLinkMillis == 0 || millis() - lastMapsLinkMillis >= 5000)
         {
