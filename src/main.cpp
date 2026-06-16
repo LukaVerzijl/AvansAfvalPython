@@ -33,7 +33,6 @@ void setup()
 
 void loop()
 {
-    if (gps.update(&Serial, &Serial))
     ai.invokeEvery(5000, Serial, true);
 
     if (gps.update())
