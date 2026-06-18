@@ -96,6 +96,17 @@ bool SscmaUtil::invokeEvery(uint32_t intervalMillis, Stream &output, bool filter
     _lastInvokeMillis = millis();
     if (!invoke(filter, showImage))
     {
+        if (_lastError == CMD_ETIMEDOUT && filter)
+        {
+            output.println("SSCMA: geen nieuwe data, zonder filter proberen...");
+            if (invoke(false, showImage))
+            {
+                printSummary(output);
+                printDetections(output);
+                return true;
+            }
+        }
+
         output.print("SSCMA: invoke fout ");
         output.println(_lastError);
         return false;
@@ -183,12 +194,18 @@ void SscmaUtil::printSummary(Stream &output)
 
 void SscmaUtil::printDetections(Stream &output)
 {
+    if (boxCount() == 0 && classCount() == 0 && pointCount() == 0 && keypointCount() == 0)
+    {
+        output.println("AI: geen detecties.");
+        return;
+    }
+
+    output.println("AI found:");
+
     for (size_t i = 0; i < boxCount(); i++)
     {
         boxes_t detection = box(i);
-        output.print("Box[");
-        output.print(i);
-        output.print("] target=");
+        output.print(" - box target=");
         output.print(detection.target);
         output.print(", score=");
         output.print(detection.score);
