@@ -29,10 +29,16 @@ public:
     classes_t classification(size_t index);
     point_t point(size_t index);
     perf_t performance();
+    String info(bool refresh = false);
     String lastImage();
 
+    void printInfo(Stream &output = Serial);
+    bool configureScoreThreshold(uint8_t score, Stream &output = Serial);
+    bool printRawCommand(const char *command, Stream &output = Serial, uint32_t timeoutMillis = 3000);
+    bool printRawInvoke(Stream &output = Serial, uint32_t timeoutMillis = 5000);
+    void printRawDiagnostics(Stream &output = Serial);
     void printSummary(Stream &output = Serial);
-    void printDetections(Stream &output = Serial);
+    void printDetections(Stream &output = Serial, uint8_t minimumScore = 0);
 
 private:
     SSCMA _ai;

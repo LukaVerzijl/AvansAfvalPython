@@ -94,6 +94,8 @@ bool SscmaUtil::invokeEvery(uint32_t intervalMillis, Stream &output, bool filter
     }
 
     _lastInvokeMillis = millis();
+    output.println("SSCMA: check detecties...");
+
     if (!invoke(filter, showImage))
     {
         if (_lastError == CMD_ETIMEDOUT && filter)
@@ -172,6 +174,125 @@ String SscmaUtil::lastImage()
     return _ai.last_image();
 }
 
+String SscmaUtil::info(bool refresh)
+{
+    return _ai.info(!refresh);
+}
+
+void SscmaUtil::printInfo(Stream &output)
+{
+    String deviceInfo = info(true);
+    if (deviceInfo.length() == 0)
+    {
+        output.println("SSCMA info: leeg of niet beschikbaar.");
+        return;
+    }
+
+    output.print("SSCMA info: ");
+    output.println(deviceInfo);
+}
+
+bool SscmaUtil::configureScoreThreshold(uint8_t score, Stream &output)
+{
+    if (!_ready)
+    {
+        return false;
+    }
+
+    output.print("SSCMA: confidence threshold instellen op ");
+    output.println(score);
+
+    printRawCommand("TSCORE?", output, 1500);
+    printRawCommand("INVOKE=-1,0,1", output, 2000);
+    delay(100);
+
+    String thresholdCommand = "TSCORE=";
+    thresholdCommand += String(score);
+    bool configured = printRawCommand(thresholdCommand.c_str(), output, 2000);
+
+    printRawCommand("TSCORE?", output, 1500);
+    printRawCommand("BREAK", output, 2000);
+
+    return configured;
+}
+
+bool SscmaUtil::printRawCommand(const char *command, Stream &output, uint32_t timeoutMillis)
+{
+    if (!_ready)
+    {
+        return false;
+    }
+
+    output.print("SSCMA raw command: ");
+    output.println(command);
+
+    String fullCommand = "AT+";
+    fullCommand += command;
+    fullCommand += "\r\n";
+    _ai.write(fullCommand.c_str(), fullCommand.length());
+
+    bool received = false;
+    uint32_t startMillis = millis();
+    while (!received && millis() - startMillis < timeoutMillis)
+    {
+        _ai.fetch([&output, &received](const char *response, size_t length)
+                  {
+                      output.print("SSCMA raw response: ");
+                      output.write(reinterpret_cast<const uint8_t *>(response), length);
+                      output.println();
+                      received = true;
+                  });
+        delay(10);
+    }
+
+    if (!received)
+    {
+        output.println("SSCMA raw response: timeout");
+    }
+
+    return received;
+}
+
+bool SscmaUtil::printRawInvoke(Stream &output, uint32_t timeoutMillis)
+{
+    if (!_ready)
+    {
+        return false;
+    }
+
+    output.println("SSCMA raw invoke: INVOKE=1,0,1");
+    _ai.write("AT+INVOKE=1,0,1\r\n", strlen("AT+INVOKE=1,0,1\r\n"));
+
+    bool received = false;
+    uint32_t startMillis = millis();
+    while (millis() - startMillis < timeoutMillis)
+    {
+        _ai.fetch([&output, &received](const char *response, size_t length)
+                  {
+                      output.print("SSCMA raw invoke response: ");
+                      output.write(reinterpret_cast<const uint8_t *>(response), length);
+                      output.println();
+                      received = true;
+                  });
+        delay(10);
+    }
+
+    if (!received)
+    {
+        output.println("SSCMA raw invoke response: timeout");
+    }
+
+    return received;
+}
+
+void SscmaUtil::printRawDiagnostics(Stream &output)
+{
+    printRawCommand("INFO?", output);
+    printRawCommand("MODEL?", output);
+    printRawCommand("MODELS?", output);
+    printRawCommand("ALGOS?", output);
+}
+
 void SscmaUtil::printSummary(Stream &output)
 {
     perf_t perf = performance();
@@ -192,11 +313,31 @@ void SscmaUtil::printSummary(Stream &output)
     output.println(perf.postprocess);
 }
 
-void SscmaUtil::printDetections(Stream &output)
+void SscmaUtil::printDetections(Stream &output, uint8_t minimumScore)
 {
-    if (boxCount() == 0 && classCount() == 0 && pointCount() == 0 && keypointCount() == 0)
+    bool hasDetection = false;
+    for (size_t i = 0; i < boxCount(); i++)
     {
-        output.println("AI: geen detecties.");
+        if (box(i).score >= minimumScore)
+        {
+            hasDetection = true;
+            break;
+        }
+    }
+
+    for (size_t i = 0; i < classCount() && !hasDetection; i++)
+    {
+        if (classification(i).score >= minimumScore)
+        {
+            hasDetection = true;
+        }
+    }
+
+    if (!hasDetection)
+    {
+        output.print("AI: geen detecties boven confidence ");
+        output.print(minimumScore);
+        output.println(".");
         return;
     }
 
@@ -205,6 +346,11 @@ void SscmaUtil::printDetections(Stream &output)
     for (size_t i = 0; i < boxCount(); i++)
     {
         boxes_t detection = box(i);
+        if (detection.score < minimumScore)
+        {
+            continue;
+        }
+
         output.print(" - box target=");
         output.print(detection.target);
         output.print(", score=");
@@ -222,6 +368,11 @@ void SscmaUtil::printDetections(Stream &output)
     for (size_t i = 0; i < classCount(); i++)
     {
         classes_t result = classification(i);
+        if (result.score < minimumScore)
+        {
+            continue;
+        }
+
         output.print("Class[");
         output.print(i);
         output.print("] target=");
