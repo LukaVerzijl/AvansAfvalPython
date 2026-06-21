@@ -6,12 +6,13 @@ bool GpsCoordinates::isValid() const
 }
 
 GpsUtil::GpsUtil(TwoWire &wire, uint8_t i2cAddress)
-    : _gps(&wire), _i2cAddress(i2cAddress)
+    : _gps(&wire), _wire(&wire), _i2cAddress(i2cAddress)
 {
 }
 
 void GpsUtil::begin()
 {
+    _wire->begin();
     _gps.begin(_i2cAddress);
     _gps.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
     _gps.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ);
@@ -19,21 +20,26 @@ void GpsUtil::begin()
 
 bool GpsUtil::update(Stream *gpsInput, Print *rawOutput)
 {
+    const uint16_t maxBytesPerUpdate = 256;
+    uint16_t bytesRead = 0;
+
     if (gpsInput != nullptr)
     {
-        while (gpsInput->available())
+        while (gpsInput->available() && bytesRead < maxBytesPerUpdate)
         {
             _gps.write(gpsInput->read());
+            bytesRead++;
         }
     }
 
-    while (_gps.available())
+    while (_gps.available() && bytesRead < maxBytesPerUpdate)
     {
         char c = _gps.read();
         if (rawOutput != nullptr && c != 0)
         {
             rawOutput->write(c);
         }
+        bytesRead++;
     }
 
     if (!_gps.newNMEAreceived())
@@ -47,6 +53,16 @@ bool GpsUtil::update(Stream *gpsInput, Print *rawOutput)
 bool GpsUtil::hasFix() const
 {
     return _gps.fix;
+}
+
+uint8_t GpsUtil::satelliteCount() const
+{
+    return _gps.satellites;
+}
+
+float GpsUtil::hdop() const
+{
+    return _gps.HDOP;
 }
 
 GpsCoordinates GpsUtil::getCoordinates() const

@@ -16,9 +16,15 @@ DetectionReportClient reportClient(REPORT_URL, REPORT_AUTH_TOKEN, REPORT_AUTH_SC
 HardwareSerial atSerial(0);
 
 uint32_t lastMapsLinkMillis = 0;
+uint32_t lastGpsStatusMillis = 0;
 uint32_t lastAiSearchMillis = 0;
 uint32_t lastAiCheckMillis = 0;
 uint32_t lastReportAttemptMillis = 0;
+uint32_t lastAiGpsWaitMillis = 0;
+bool lastGpsFix = false;
+bool aiReleasedAfterGpsFix = false;
+bool firstGpsUpdateStarted = false;
+bool firstGpsUpdateFinished = false;
 bool rawInvokePrinted = false;
 
 struct DetectionReportSource
@@ -236,10 +242,65 @@ void reportIfEnoughDetections()
     }
 }
 
+void printGpsStatus(const char *reason)
+{
+#if GPS_ENABLED
+    Serial.print("GPS: ");
+    Serial.print(reason);
+
+    if (!gps.hasFix())
+    {
+        Serial.print(" | geen fix");
+        Serial.print(" | satellieten ");
+        Serial.println(gps.satelliteCount());
+        return;
+    }
+
+    GpsCoordinates coordinates = gps.getCoordinates();
+    Serial.print(" | fix");
+    Serial.print(" | satellieten ");
+    Serial.print(gps.satelliteCount());
+    Serial.print(" | HDOP ");
+    Serial.print(gps.hdop(), 2);
+    Serial.print(" | lat ");
+    Serial.print(coordinates.latitude, 6);
+    Serial.print(" | lon ");
+    Serial.println(coordinates.longitude, 6);
+#endif
+}
+
 void updateGps()
 {
 #if GPS_ENABLED
-    if (gps.update())
+    if (lastGpsStatusMillis == 0 || millis() - lastGpsStatusMillis >= 5000)
+    {
+        printGpsStatus(gps.hasFix() ? "status" : "zoekt naar fix");
+        lastGpsStatusMillis = millis();
+    }
+
+    if (!firstGpsUpdateStarted)
+    {
+        firstGpsUpdateStarted = true;
+        Serial.println("GPS: eerste update starten");
+    }
+
+    bool parsedGpsMessage = gps.update();
+
+    if (!firstGpsUpdateFinished)
+    {
+        firstGpsUpdateFinished = true;
+        Serial.println("GPS: eerste update klaar");
+    }
+
+    bool hasFix = gps.hasFix();
+    if (parsedGpsMessage && hasFix != lastGpsFix)
+    {
+        printGpsStatus(hasFix ? "fix gevonden" : "fix verloren");
+        lastGpsFix = hasFix;
+        lastGpsStatusMillis = millis();
+    }
+
+    if (parsedGpsMessage)
     {
         if (lastMapsLinkMillis == 0 || millis() - lastMapsLinkMillis >= 5000)
         {
@@ -249,6 +310,33 @@ void updateGps()
             }
         }
     }
+#endif
+}
+
+bool gpsReadyForAi()
+{
+#if GPS_ENABLED
+    if (!gps.hasFix() || gps.satelliteCount() == 0)
+    {
+        if (lastAiGpsWaitMillis == 0 || millis() - lastAiGpsWaitMillis >= 5000)
+        {
+            Serial.print("SSCMA: wacht op GPS-fix voordat AI start | satellieten ");
+            Serial.println(gps.satelliteCount());
+            lastAiGpsWaitMillis = millis();
+        }
+
+        return false;
+    }
+
+    if (!aiReleasedAfterGpsFix)
+    {
+        aiReleasedAfterGpsFix = true;
+        Serial.println("SSCMA: GPS-fix gevonden, AI starten...");
+    }
+
+    return true;
+#else
+    return true;
 #endif
 }
 
@@ -273,6 +361,11 @@ void setup()
 void loop()
 {
     updateGps();
+
+    if (!gpsReadyForAi())
+    {
+        return;
+    }
 
     if (findAiVision())
     {
