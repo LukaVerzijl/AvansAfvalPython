@@ -11,7 +11,7 @@
 GpsUtil gps;
 SscmaUtil ai;
 WifiModule wifi(WIFI_SSID, WIFI_PASSWORD);
-DetectionReportClient reportClient(REPORT_URL, REPORT_AUTH_TOKEN, REPORT_AUTH_SCHEME, REPORT_REFRESH_TOKEN,
+DetectionReportClient reportClient(API_BASE_URL, REPORT_PATH, ACCOUNT_LOGIN_EMAIL, ACCOUNT_LOGIN_PASSWORD,
                                    REPORT_REFRESH_TOKEN_HEADER, REPORT_TLS_INSECURE);
 HardwareSerial atSerial(0);
 
@@ -350,6 +350,7 @@ void setup()
 
     wifi.begin(Serial, 15000);
     configureTimeSync();
+    reportClient.login(wifi, Serial);
 #if GPS_ENABLED
     gps.begin();
     Serial.println("GPS: gestart");
