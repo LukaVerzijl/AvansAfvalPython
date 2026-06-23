@@ -286,6 +286,17 @@ void updateGps()
 
     bool parsedGpsMessage = gps.update();
 
+#if GPS_RAW_DEBUG
+    static String lastPrintedGpsRaw;
+    String lastNmea = gps.lastNmea();
+    if (lastNmea.length() > 0 && lastNmea != lastPrintedGpsRaw)
+    {
+        Serial.print("GPS raw: ");
+        Serial.println(lastNmea);
+        lastPrintedGpsRaw = lastNmea;
+    }
+#endif
+
     if (!firstGpsUpdateFinished)
     {
         firstGpsUpdateFinished = true;

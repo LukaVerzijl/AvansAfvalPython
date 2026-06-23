@@ -24,6 +24,7 @@ public:
     bool hasFix() const;
     uint8_t satelliteCount() const;
     float hdop() const;
+    String lastNmea() const;
     GpsCoordinates getCoordinates() const;
     String getGoogleMapsLink() const;
     bool printGoogleMapsLink(Print &output) const;
@@ -32,6 +33,7 @@ private:
     Adafruit_GPS _gps;
     TwoWire *_wire;
     uint8_t _i2cAddress;
+    String _lastNmea;
 };
 
 #endif

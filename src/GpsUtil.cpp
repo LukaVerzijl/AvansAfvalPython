@@ -47,6 +47,8 @@ bool GpsUtil::update(Stream *gpsInput, Print *rawOutput)
         return false;
     }
 
+    _lastNmea = _gps.lastNMEA();
+    _lastNmea.trim();
     return _gps.parse(_gps.lastNMEA());
 }
 
@@ -63,6 +65,11 @@ uint8_t GpsUtil::satelliteCount() const
 float GpsUtil::hdop() const
 {
     return _gps.HDOP;
+}
+
+String GpsUtil::lastNmea() const
+{
+    return _lastNmea;
 }
 
 GpsCoordinates GpsUtil::getCoordinates() const

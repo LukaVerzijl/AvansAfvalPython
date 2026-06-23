@@ -14,7 +14,8 @@
 #define SSCMA_DEVICE_TSCORE 60
 
 // GPS
-#define GPS_ENABLED 1
+#define GPS_ENABLED 0
+#define GPS_RAW_DEBUG 1
 
 // Account login
 #define API_BASE_URL "https://avansafvalapi-production.up.railway.app"
