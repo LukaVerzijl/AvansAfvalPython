@@ -6,6 +6,7 @@
 #include "DetectionReportClient.h"
 #include "GpsUtil.h"
 #include "SscmaUtil.h"
+#include "WeatherClient.h"
 #include "WifiModule.h"
 
 GpsUtil gps;
@@ -13,6 +14,7 @@ SscmaUtil ai;
 WifiModule wifi(WIFI_SSID, WIFI_PASSWORD);
 DetectionReportClient reportClient(API_BASE_URL, REPORT_PATH, ACCOUNT_LOGIN_EMAIL, ACCOUNT_LOGIN_PASSWORD,
                                    REPORT_REFRESH_TOKEN_HEADER, REPORT_TLS_INSECURE);
+WeatherClient weatherClient(OPEN_METEO_BASE_URL, REPORT_TLS_INSECURE);
 HardwareSerial atSerial(0);
 
 uint32_t lastMapsLinkMillis = 0;
@@ -194,6 +196,50 @@ String buildExternalParameters(const DetectionReportSource &detection)
     document["perfPreprocess"] = perf.prepocess;
     document["perfInference"] = perf.inference;
     document["perfPostprocess"] = perf.postprocess;
+
+    JsonObject weather = document["weather"].to<JsonObject>();
+#if GPS_ENABLED
+    if (!gps.hasFix())
+    {
+        weather["available"] = false;
+        weather["reason"] = "no-gps-fix";
+    }
+    else
+    {
+        GpsCoordinates coordinates = gps.getCoordinates();
+        if (!coordinates.isValid())
+        {
+            weather["available"] = false;
+            weather["reason"] = "invalid-gps-coordinates";
+        }
+        else
+        {
+            String weatherJson;
+            if (weatherClient.fetchCurrent(coordinates, weatherJson, wifi, Serial))
+            {
+                JsonDocument weatherDocument;
+                DeserializationError error = deserializeJson(weatherDocument, weatherJson);
+                if (!error)
+                {
+                    weather.set(weatherDocument.as<JsonObject>());
+                }
+                else
+                {
+                    weather["available"] = false;
+                    weather["reason"] = "weather-json-parse-failed";
+                }
+            }
+            else
+            {
+                weather["available"] = false;
+                weather["reason"] = "weather-request-failed";
+            }
+        }
+    }
+#else
+    weather["available"] = false;
+    weather["reason"] = "gps-disabled";
+#endif
 
     String value;
     serializeJson(document, value);

@@ -29,6 +29,9 @@
 #define REPORT_COOLDOWN_MS 30000
 #define REPORT_TLS_INSECURE 1
 
+// Weather API
+#define OPEN_METEO_BASE_URL "https://api.open-meteo.com"
+
 // Time sync for captureDate
 #define TIME_NTP_SERVER "pool.ntp.org"
 
