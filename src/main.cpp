@@ -37,6 +37,15 @@ struct DetectionReportSource
     const char *sourceType = "";
 };
 
+struct DetectionConfirmationState
+{
+    size_t hitCount = 0;
+    int target = -1;
+    uint32_t confidenceTotal = 0;
+};
+
+DetectionConfirmationState detectionConfirmation;
+
 void configureAiVision()
 {
     ai.printInfo(Serial);
@@ -130,7 +139,7 @@ String currentGpsLocation()
 #endif
 }
 
-DetectionReportSource collectDetectionReportSource()
+DetectionReportSource collectBestBoxHit()
 {
     DetectionReportSource result;
 
@@ -142,60 +151,101 @@ DetectionReportSource collectDetectionReportSource()
             continue;
         }
 
-        result.detectionCount++;
         if (detection.score >= result.confidence)
         {
+            result.detectionCount = 1;
             result.target = detection.target;
             result.confidence = detection.score;
             result.sourceType = "box";
         }
     }
 
-    for (size_t i = 0; i < ai.classCount(); i++)
-    {
-        classes_t classification = ai.classification(i);
-        if (classification.score < SSCMA_MIN_SCORE)
-        {
-            continue;
-        }
+    return result;
+}
 
-        result.detectionCount++;
-        if (classification.score >= result.confidence)
+void resetDetectionConfirmation()
+{
+    detectionConfirmation.hitCount = 0;
+    detectionConfirmation.target = -1;
+    detectionConfirmation.confidenceTotal = 0;
+}
+
+bool addDetectionConfirmationHit(const DetectionReportSource &hit)
+{
+    if (hit.detectionCount == 0)
+    {
+        if (detectionConfirmation.hitCount > 0)
         {
-            result.target = classification.target;
-            result.confidence = classification.score;
-            result.sourceType = "class";
+            Serial.println("Report: bevestiging gereset, geen box-hit in deze AI-check.");
         }
+        resetDetectionConfirmation();
+        return false;
     }
 
+    if (detectionConfirmation.hitCount > 0 && detectionConfirmation.target != hit.target)
+    {
+        Serial.println("Report: bevestiging gereset, target veranderde.");
+        resetDetectionConfirmation();
+    }
+
+    detectionConfirmation.hitCount++;
+    detectionConfirmation.target = hit.target;
+    detectionConfirmation.confidenceTotal += hit.confidence;
+
+    Serial.print("Report: box-hit bevestiging ");
+    Serial.print(detectionConfirmation.hitCount);
+    Serial.print("/");
+    Serial.print(REPORT_DETECTION_COUNT);
+    Serial.print(" | target=");
+    Serial.print(hit.target);
+    Serial.print(" | confidence=");
+    Serial.println(hit.confidence);
+
+    return detectionConfirmation.hitCount >= REPORT_DETECTION_COUNT;
+}
+
+DetectionReportSource buildConfirmedDetectionReport()
+{
+    DetectionReportSource result;
+    result.detectionCount = detectionConfirmation.hitCount;
+    result.target = detectionConfirmation.target;
+    result.confidence = static_cast<uint8_t>(
+        (detectionConfirmation.confidenceTotal + detectionConfirmation.hitCount / 2) / detectionConfirmation.hitCount);
+    result.sourceType = "box-confirmed";
     return result;
 }
 
 String garbageTypeFromTarget(const DetectionReportSource &detection)
 {
+    const char *garbageTypes[] = {
+        "paper",
+        "plastic",
+        "glass",
+        "metal",
+        "cardboard",
+        "trash",
+    };
+    const size_t garbageTypeCount = sizeof(garbageTypes) / sizeof(garbageTypes[0]);
+
     if (detection.target < 0)
     {
         return "";
     }
 
-    String garbageType = "target-";
-    garbageType += String(detection.target);
-    return garbageType;
+    if (static_cast<size_t>(detection.target) >= garbageTypeCount)
+    {
+        String fallback = "unknown-target-";
+        fallback += String(detection.target);
+        return fallback;
+    }
+
+    return garbageTypes[detection.target];
 }
 
-String buildExternalParameters(const DetectionReportSource &detection)
+String buildExternalParameters()
 {
     JsonDocument document;
-    perf_t perf = ai.performance();
-
-    document["source"] = "sscma";
-    document["sourceType"] = detection.sourceType;
-    document["target"] = detection.target;
-    document["detections"] = detection.detectionCount;
-    document["minimumScore"] = SSCMA_MIN_SCORE;
-    document["perfPreprocess"] = perf.prepocess;
-    document["perfInference"] = perf.inference;
-    document["perfPostprocess"] = perf.postprocess;
+    document["googleMapsLink"] = gps.getGoogleMapsLink();
 
     JsonObject weather = document["weather"].to<JsonObject>();
 #if GPS_ENABLED
@@ -253,29 +303,33 @@ DetectionReportPayload buildDetectionReportPayload(const DetectionReportSource &
     payload.garbageType = garbageTypeFromTarget(detection);
     payload.location = currentGpsLocation();
     payload.confidence = detection.confidence;
-    payload.externalParameters = buildExternalParameters(detection);
+    payload.externalParameters = buildExternalParameters();
     return payload;
 }
 
 void reportIfEnoughDetections()
 {
-    DetectionReportSource detection = collectDetectionReportSource();
-    if (detection.detectionCount < REPORT_DETECTION_COUNT)
+    DetectionReportSource hit = collectBestBoxHit();
+    if (!addDetectionConfirmationHit(hit))
     {
         return;
     }
 
     if (lastReportAttemptMillis != 0 && millis() - lastReportAttemptMillis < REPORT_COOLDOWN_MS)
     {
-        Serial.println("Report: genoeg detecties, maar cooldown is nog actief.");
+        Serial.println("Report: genoeg bevestigde box-hits, maar cooldown is nog actief.");
+        resetDetectionConfirmation();
         return;
     }
 
     lastReportAttemptMillis = millis();
+    DetectionReportSource detection = buildConfirmedDetectionReport();
 
     Serial.print("Report: ");
     Serial.print(detection.detectionCount);
-    Serial.println(" detecties gevonden, request versturen...");
+    Serial.print(" bevestigde box-hits gevonden, gemiddelde confidence=");
+    Serial.print(detection.confidence);
+    Serial.println(", request versturen...");
 
     DetectionReportPayload payload = buildDetectionReportPayload(detection);
     if (reportClient.send(payload, wifi, Serial))
@@ -286,6 +340,8 @@ void reportIfEnoughDetections()
     {
         Serial.println("Report: versturen mislukt.");
     }
+
+    resetDetectionConfirmation();
 }
 
 void printGpsStatus(const char *reason)
